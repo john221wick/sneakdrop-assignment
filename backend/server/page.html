@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sneaker Drop</title>
+<style>
+  body { font-family: ui-monospace, Menlo, monospace; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; }
+  button { font: inherit; margin-right: .5rem; }
+  input { font: inherit; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  header button { margin-right: 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sneaker Drop</h1>
+  <button id="sim-toggle" aria-expanded="false" aria-controls="sim">Show simulator</button>
+</header>
+
+<section id="sim" hidden>
+<h2>Simulator</h2>
+<p>Runs a whole drop in a sandbox: its own 20 pairs, short holds, and the fake payment
+company set to repeat every message. Shows who got a pair and checks every rule.
+It does not touch the live drop below.</p>
+<p>
+  <label>Buyers <input id="sim-buyers" type="number" value="1000" min="1" max="5000" style="width:6rem"></label>
+  <label>clicking within <input id="sim-window" type="number" value="1000" min="0" max="5000" style="width:6rem"> ms</label>
+  <button id="sim-run">Run simulation</button>
+</p>
+<p><small>1000 ms spreads the clicks across one second, so the first clickers should win. 0 ms sends every click at the same instant.</small></p>
+<pre id="sim-out"></pre>
+<hr>
+</section>
+
+<p>User id: <input id="user" size="28" autocomplete="off" spellcheck="false"></p>
+<p><small>Each tab can act as a different user. Change the id to switch.</small></p>
+<pre id="out">loading...</pre>
+<p>
+  <button id="buy">Buy</button>
+  <button id="join">Join waiting line</button>
+  <button id="pay">Pay</button>
+</p>
+<p id="msg"></p>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const ERRORS = {
+    sold_out: 'Sold out. You can join the waiting line.',
+    already_holding: 'You already have a pair on hold.',
+    limit_reached: 'You have bought the maximum of 2 pairs.',
+    available: 'Pairs are still on sale. Click Buy instead.',
+    hold_not_active: 'That hold is no longer active.',
+    hold_not_found: 'That hold was not found.'
+  };
+
+  let user = '';
+  try { user = localStorage.getItem('sneakdrop.user') || ''; } catch {}
+  if (!user) user = 'user-' + Math.random().toString(36).slice(2, 8);
+  $('user').value = user;
+  saveUser();
+
+  let state = null;
+  let deadline = 0;
+  let last = null;
+
+  function saveUser() {
+    user = $('user').value.trim() || user;
+    $('user').value = user;
+    try { localStorage.setItem('sneakdrop.user', user); } catch {}
+  }
+
+  async function refresh() {
+    try {
+      const res = await fetch('/api/state?user=' + encodeURIComponent(user));
+      if (!res.ok) return;
+      state = await res.json();
+    } catch { return; }
+    // Count down from the server's remaining time so a wrong local clock
+    // does not matter.
+    deadline = state.hold ? Date.now() + state.hold.expires_in_ms : 0;
+    noticeChanges();
+    render();
+  }
+
+  function noticeChanges() {
+    if (last && last.hold && !state.hold) {
+      say(state.purchases > last.purchases ? 'Payment confirmed. The pair is yours.' : 'Your hold ran out.');
+    } else if (last && !last.hold && state.hold && last.queue_position != null) {
+      say('Your turn! A pair was passed to you from the waiting line.');
+    }
+    last = state;
+  }
+
+  function countdown() {
+    const s = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  function render() {
+    if (!state) return;
+    const lines = [
+      'Pairs left:      ' + state.available + ' of ' + state.total,
+      'Sold:            ' + state.sold,
+      'Your purchases:  ' + state.purchases + ' of 2',
+      'Your hold:       ' + (state.hold ? countdown() + ' left to pay (hold #' + state.hold.id + ')' : 'none'),
+      'Place in line:   ' + (state.queue_position != null ? state.queue_position + ' of ' + state.queue_length : 'not in line'),
+    ];
+    if (state.refunds_due) lines.push('Refunds due:     ' + state.refunds_due + ' (payment arrived after your hold ended)');
+    if (state.message) lines.push('', state.message);
+    $('out').textContent = lines.join('\n');
+
+    const hasHold = !!state.hold;
+    const atLimit = state.purchases >= 2;
+    $('buy').disabled = hasHold || atLimit || state.available === 0;
+    $('join').disabled = hasHold || atLimit || state.available > 0 || state.queue_position != null;
+    $('pay').disabled = !hasHold;
+  }
+
+  function say(text) { $('msg').textContent = text; }
+
+  async function post(path, body) {
+    try {
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json().catch(() => ({}));
+      return { ok: res.ok, data };
+    } catch {
+      return { ok: false, data: { error: 'network' } };
+    }
+  }
+
+  function fail(data) { say(ERRORS[data.error] || 'Something went wrong: ' + data.error); }
+
+  $('user').onchange = () => { saveUser(); state = null; last = null; say(''); refresh(); };
+
+  $('buy').onclick = async () => {
+    const r = await post('/api/hold', { user });
+    r.ok ? say('Pair held for you. Pay before the timer runs out.') : fail(r.data);
+    refresh();
+  };
+
+  $('join').onclick = async () => {
+    const r = await post('/api/queue', { user });
+    r.ok ? say('You joined the line at place ' + r.data.position + '.') : fail(r.data);
+    refresh();
+  };
+
+  $('pay').onclick = async () => {
+    if (!state || !state.hold) return;
+    const r = await post('/api/pay', { user, hold_id: state.hold.id });
+    r.ok ? say('Payment sent. Waiting for the payment company to confirm...') : fail(r.data);
+    refresh();
+  };
+
+  function showSim(open) {
+    $('sim').hidden = !open;
+    $('sim-toggle').textContent = open ? 'Hide simulator' : 'Show simulator';
+    $('sim-toggle').setAttribute('aria-expanded', String(open));
+    try { localStorage.setItem('sneakdrop.sim', open ? 'open' : 'closed'); } catch {}
+  }
+  $('sim-toggle').onclick = () => showSim($('sim').hidden);
+  let simOpen = false;
+  try { simOpen = localStorage.getItem('sneakdrop.sim') === 'open'; } catch {}
+  showSim(simOpen);
+
+  const pad = (v, n) => String(v).padStart(n);
+  const padEnd = (v, n) => String(v).padEnd(n);
+
+  function renderSim(r) {
+    const f = r.final;
+    const out = [
+      (r.passed ? 'ALL CHECKS PASSED' : 'SOME CHECKS FAILED'),
+      '',
+      `${r.clicks} clicks from ${r.buyers} buyers ` +
+        (r.window_ms ? `spread over ${r.window_ms} ms` : 'all at the same instant') +
+        `, ${r.stock} pairs, holds last ${r.hold_ttl_ms / 1000}s in the sandbox.`,
+      `The rush took ${r.rush_ms} ms: ` +
+        Object.entries(r.outcomes).map(([k, v]) => `${v} ${k}`).join(', ') + '.',
+      '',
+      'CHECKS'
+    ];
+    for (const c of r.checks) {
+      out.push(`  [${c.info ? 'NOTE' : c.ok ? 'PASS' : 'FAIL'}] ${c.name}`);
+      if (c.detail) out.push(`         ${c.detail}`);
+    }
+
+    out.push('', 'WHO GOT A PAIR, in the order the server granted them');
+    out.push('  order  hold  buyer        click #  then');
+    for (const w of r.winners || []) {
+      out.push(`  ${pad(w.order, 5)}  ${pad(w.hold_id, 4)}  ${padEnd(w.user, 11)}  ${padEnd('#' + w.click, 7)}  ${w.fate || ''}`);
+    }
+
+    if (r.line && r.line.length) {
+      out.push('', 'WAITING LINE');
+      for (const l of r.line) out.push(`  ${pad(l.position, 2)}. ${padEnd(l.user, 11)}  ${l.fate}`);
+    }
+
+    if (r.messages && r.messages.length) {
+      out.push('', 'PAYMENT MESSAGES THE SHOP RECEIVED, in arrival order');
+      for (const m of r.messages) {
+        const answer = m.status === 200 ? m.outcome : `HTTP ${m.status} ${m.outcome}`;
+        const who = m.source === 'simulator' ? '  (sent by the simulator)' : '';
+        out.push(`  +${pad(m.at_ms, 5)}ms  ${padEnd(m.kind, 7)}  hold ${pad(m.hold_id, 2)}  ${padEnd(m.event_id.slice(0, 16), 16)}  -> ${answer}${who}`);
+      }
+    }
+
+    out.push('', 'FINAL BOOKS',
+      `  available ${f.available} + held ${f.held} + sold ${f.sold} = ${f.available + f.held + f.sold} of ${f.total}` +
+        `; ${f.waiting} still waiting; ${f.refunds_due} refund owed`);
+    $('sim-out').textContent = out.join('\n');
+  }
+
+  $('sim-run').onclick = async () => {
+    const buyers = Number($('sim-buyers').value);
+    const window_ms = Number($('sim-window').value);
+    $('sim-run').disabled = true;
+    $('sim-out').textContent = `Running: ${buyers} buyers rush the drop, then payments, the waiting line and expiry play out (a few seconds)...`;
+    const r = await post('/api/simulate', { buyers, window_ms });
+    $('sim-run').disabled = false;
+    if (r.ok) renderSim(r.data);
+    else $('sim-out').textContent = 'Simulation failed: ' + r.data.error;
+  };
+
+  refresh();
+  setInterval(refresh, 1000);
+  setInterval(render, 250);
+</script>
+</body>
+</html>

@@ -1,0 +1,255 @@
+@import 'tailwindcss';
+
+@plugin '@tailwindcss/forms' {
+	strategy: class;
+}
+
+/* Class-based dark mode, driven by the pre-paint script in app.html. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+	--font-sans: 'Archivo', ui-sans-serif, system-ui, sans-serif;
+
+	--color-bg: var(--bg);
+	--color-surface: var(--surface);
+	--color-raised: var(--raised);
+	--color-fg: var(--fg);
+	--color-muted: var(--muted);
+	--color-line: var(--line);
+	--color-accent: var(--accent);
+	--color-accent-ink: var(--accent-ink);
+	--color-accent-soft: var(--accent-soft);
+	--color-blossom: var(--blossom);
+
+	--ease-editorial: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ---------------------------------------------------------------- palettes */
+
+/* Tissue paper and plum ink. Sakura magenta marks anything you can act on. */
+:root {
+	color-scheme: light;
+	--bg: #fbf6f7;
+	--surface: #f4eaee;
+	--raised: #ffffff;
+	--fg: #2b1631;
+	--muted: #75627a;
+	--line: #e6d6dd;
+	--accent: #c8104f;
+	--accent-ink: #ffffff;
+	--accent-soft: #fbe1ea;
+	--blossom: #f4b3c6;
+}
+
+.dark {
+	color-scheme: dark;
+	--bg: #1c1120;
+	--surface: #241629;
+	--raised: #2c1d32;
+	--fg: #f8eef2;
+	--muted: #b9a4bd;
+	--line: #3b2a42;
+	--accent: #ff6b9c;
+	--accent-ink: #1c1120;
+	--accent-soft: #3a1a2b;
+	--blossom: #7d3652;
+}
+
+/* -------------------------------------------------------------------- base */
+
+@layer base {
+	html {
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+
+	body {
+		background-color: var(--bg);
+		color: var(--fg);
+		font-family: var(--font-sans);
+		line-height: 1.5;
+		transition:
+			background-color 0.4s var(--ease-editorial),
+			color 0.4s var(--ease-editorial);
+	}
+
+	::selection {
+		background: var(--blossom);
+		color: #2b1631;
+	}
+
+	:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 3px;
+		border-radius: 4px;
+	}
+
+	h1,
+	h2,
+	h3 {
+		font-weight: 650;
+		letter-spacing: -0.015em;
+	}
+}
+
+/* -------------------------------------------------------------- components */
+
+@layer components {
+	/* Set like the name printed on a shoebox: extra condensed, black, slanted. */
+	.display {
+		font-stretch: 62.5%;
+		font-weight: 900;
+		font-style: italic;
+		text-transform: uppercase;
+		line-height: 0.86;
+		letter-spacing: -0.005em;
+	}
+
+	.label {
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--muted);
+	}
+
+	.btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.6rem;
+		min-height: 2.5rem;
+		padding: 0.55rem 1.1rem;
+		border-radius: 0.75rem;
+		font-size: 0.9375rem;
+		font-weight: 600;
+		white-space: nowrap;
+		transition:
+			background-color 0.2s ease,
+			color 0.2s ease,
+			border-color 0.2s ease,
+			transform 0.2s var(--ease-editorial);
+	}
+
+	.btn:active:not(:disabled) {
+		transform: scale(0.98);
+	}
+
+	.btn:disabled {
+		cursor: not-allowed;
+		opacity: 0.55;
+	}
+
+	/* A button that is waiting on the server stays at full strength. */
+	.btn[aria-busy='true'] {
+		cursor: progress;
+		opacity: 1;
+	}
+
+	.btn-lg {
+		min-height: 3.5rem;
+		padding-inline: 1.5rem;
+		border-radius: 1rem;
+		font-size: 1.0625rem;
+	}
+
+	.btn-sm {
+		min-height: 2rem;
+		padding: 0.3rem 0.8rem;
+		border-radius: 0.6rem;
+		font-size: 0.8125rem;
+	}
+
+	.btn-solid {
+		background: var(--accent);
+		color: var(--accent-ink);
+	}
+
+	.btn-solid:hover:not(:disabled) {
+		background: var(--fg);
+		color: var(--bg);
+	}
+
+	.btn-ghost {
+		border: 1px solid var(--line);
+		color: var(--fg);
+	}
+
+	.btn-ghost:hover:not(:disabled) {
+		border-color: var(--fg);
+	}
+
+	.btn-ink {
+		background: var(--fg);
+		color: var(--bg);
+	}
+
+	.field {
+		width: 100%;
+		background: transparent;
+		border: 0;
+		border-bottom: 1px solid var(--line);
+		padding: 0.5rem 0;
+		color: var(--fg);
+		transition: border-color 0.3s var(--ease-editorial);
+	}
+
+	.field:focus {
+		outline: none;
+		border-bottom-color: var(--accent);
+	}
+
+	.field-label {
+		display: block;
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--muted);
+	}
+
+	.spinner {
+		display: inline-block;
+		flex: none;
+		width: 1em;
+		height: 1em;
+		border: 2px solid currentColor;
+		border-right-color: transparent;
+		border-radius: 999px;
+		animation: spin 0.7s linear infinite;
+	}
+
+	.skeleton {
+		border-radius: 0.5rem;
+		background: linear-gradient(90deg, var(--surface) 25%, var(--line) 50%, var(--surface) 75%);
+		background-size: 200% 100%;
+		animation: shimmer 1.4s ease infinite;
+	}
+}
+
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@keyframes shimmer {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: -100% 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.001ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.001ms !important;
+	}
+
+	/* Keep spinners turning slowly: they are the only sign the server is busy. */
+	.spinner {
+		animation-duration: 1.6s !important;
+		animation-iteration-count: infinite !important;
+	}
+}
