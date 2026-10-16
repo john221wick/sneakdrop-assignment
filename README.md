@@ -1,3 +1,11 @@
+# Assignment
+
+[Github link](https://github.com/john221wick/sneakdrop-assignment)
+
+Explanation of project link ->
+[Youtube Link](https://www.youtube.com/watch?v=MeOk3ziR6i0)
+
+
 # Sneaker Drop
 
 A small shoe brand is launching one limited sneaker. They only have 20 pairs. When the sale opens, thousands of people will click Buy at the same second.
